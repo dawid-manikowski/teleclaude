@@ -1,0 +1,23 @@
+[Unit]
+Description=Telegram Assistant Bot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=czoksu
+Group=czoksu
+WorkingDirectory=/opt/tg-assistant
+EnvironmentFile=/opt/tg-assistant/.env
+ExecStart=/opt/tg-assistant/venv/bin/python bot.py
+Restart=on-failure
+RestartSec=10
+TimeoutStopSec=30
+StartLimitIntervalSec=60
+StartLimitBurst=3
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=tg-assistant
+
+[Install]
+WantedBy=multi-user.target
