@@ -14,12 +14,13 @@ A Telegram bot that wraps the [Claude Code CLI](https://github.com/anthropics/cl
 bot.py            # PTB Application, handler registration, main()
 claude_runner.py  # asyncio subprocess, lock, timeout
 chunker.py        # 4096-char splitting, file fallback
+scheduler.py      # Proactive scheduled jobs (reminders, skills)
 systemd/          # systemd service unit
 requirements.txt
 .env.example
 ```
 
-**Core flow**: Telegram message → `claude -p <prompt> --dangerously-skip-permissions` in your assistant working directory → reply
+**Core flow**: Telegram message -> `claude -p <prompt> --dangerously-skip-permissions` in your assistant working directory -> reply
 
 ## Setup
 
@@ -52,9 +53,9 @@ All MCP environment variables (Google, Atlassian tokens, etc.) must also be pres
 ### 3. Systemd service
 
 ```bash
-cp systemd/tg-assistant.service /etc/systemd/system/
-systemctl daemon-reload
-systemctl enable --now tg-assistant
+sudo cp systemd/tg-assistant.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now tg-assistant
 ```
 
 ## Slash commands
@@ -63,12 +64,51 @@ Telegram forbids hyphens in commands, so these aliases are mapped:
 
 | Telegram | Claude prompt |
 |---|---|
+| `/start_day` | `/start-day` (morning-briefing + schedule-sync) |
+| `/end_week` | `/end-week` (memory-update + weekly-review) |
 | `/morning_briefing` | `/morning-briefing` |
 | `/weekly_review` | `/weekly-review` |
+| `/monthly_review` | `/monthly-review` |
+| `/quarterly_review` | `/quarterly-review` |
 | `/schedule_sync` | `/schedule-sync` |
 | `/memory_update` | `/memory-update` |
+| `/meeting_prep` | `/meeting-prep` |
+| `/fitness_log` | `/fitness-log` |
+| `/habit_log` | `/habit-log` |
+| `/decide` | `/decide` |
+| `/jobs` | List all scheduled jobs and next run times |
 
 Any other message or command is passed through to Claude as-is.
+
+## Quick-log messages
+
+These are recognized as single-message habit logs (no slash command needed):
+
+| Message | Action |
+|---|---|
+| `meds done` / `took meds` | Log medication in HABITS.md |
+| `roza exercises done` / `exercises done` | Log Roza exercises in HABITS.md |
+| `sleep 3/5` / `sleep 4` | Log sleep quality in HABITS.md |
+| `pushups 30` | Log pushups in FITNESS.md |
+
+## Scheduled jobs
+
+The bot automatically sends proactive reminders and runs skills:
+
+| Time (Warsaw) | Job | Type |
+|---|---|---|
+| 07:30 daily | Birthday check (7-day lookahead) | Claude skill |
+| 07:45 daily | Morning briefing (`/start-day`) | Claude skill |
+| 08:15 daily | "Meds after breakfast?" | Simple reminder |
+| 12:00 daily | "Roza oral exercises" | Simple reminder |
+| 09:00 Wednesday | "Maczfit -- pick meals" | Simple reminder |
+| 09:00 Thursday | "Prep Nathan 1:1 notes" | Simple reminder |
+| 13:45 Tuesday | "Scan tech designs Slack" | Simple reminder |
+| 14:00 Friday | End-of-week review (`/end-week`) | Claude skill |
+| 20:00 Sunday | Memory sync (`/memory-update`) | Claude skill |
+| 08:00 1st of month | Monthly review | Claude skill |
+
+Use `/jobs` in Telegram to see all scheduled jobs and their next run times.
 
 ## Security
 
