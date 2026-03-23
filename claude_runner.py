@@ -10,6 +10,15 @@ WORK_DIR = os.path.expanduser(os.environ.get("WORK_DIR", "~/assistant"))
 CLAUDE_BIN = os.environ.get("CLAUDE_BIN", "claude")
 TIMEOUT = 300
 
+SYSTEM_PROMPT = (
+    "You are responding via a Telegram bot (tg-assistant). "
+    "The user is chatting from their phone, so keep responses concise and mobile-friendly. "
+    "Avoid large code blocks or verbose output unless explicitly asked. "
+    "Telegram does not render full Markdown — use plain text or minimal formatting. "
+    "Scheduled jobs (morning briefing, weekly review, etc.) are automated and have no live user waiting, "
+    "so those can be more detailed."
+)
+
 _lock = asyncio.Lock()
 
 # Session tracking: one session per day for conversational continuity.
@@ -37,20 +46,21 @@ def _update_session(session_id: str | None) -> None:
         _session_date = date.today()
 
 
-async def run_claude(prompt: str, *, use_session: bool = True) -> str:
+async def run_claude(prompt: str, *, use_session: bool = True, agent: str | None = None) -> str:
     """Run claude -p with optional session continuity.
 
     Args:
         prompt: The prompt to send to Claude.
         use_session: If True, maintain a daily conversation session.
                      Set to False for scheduled jobs (they get isolated runs).
+        agent: If set, run with --agent <name> (skips session resume).
     """
     if _lock.locked():
         return "Processing previous request, please wait."
 
     async with _lock:
-        session_args = _get_session_args(use_session)
-        mode = "resume" if session_args else "new"
+        session_args = _get_session_args(use_session) if not agent else []
+        mode = f"agent:{agent}" if agent else ("resume" if session_args else "new")
         log.info("Running claude (%s): %r", mode, prompt[:80])
 
         cmd = [
@@ -58,8 +68,11 @@ async def run_claude(prompt: str, *, use_session: bool = True) -> str:
             "-p", prompt,
             "--dangerously-skip-permissions",
             "--output-format", "json",
+            "--append-system-prompt", SYSTEM_PROMPT,
             *session_args,
         ]
+        if agent:
+            cmd.extend(["--agent", agent])
 
         try:
             proc = await asyncio.create_subprocess_exec(

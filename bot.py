@@ -38,6 +38,15 @@ COMMAND_MAP = {
     "decide": "/decide",
 }
 
+# Available agents (must match filenames in ~/.claude/agents/)
+AVAILABLE_AGENTS = {
+    "secretary",
+    "work-ops",
+    "renovation-manager",
+    "finance-advisor",
+    "career-coach",
+}
+
 # Quick-log patterns: single-message habit tracking without invoking a full skill
 QUICK_LOG_TRIGGERS = {
     "meds done": "Log in HABITS.md: medication taken today. Confirm with streak count.",
@@ -113,6 +122,32 @@ async def handle_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     await _handle(update, claude_prompt)
 
 
+async def handle_agent(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Route a message to a specific agent: /agent <name> <prompt>"""
+    parts = update.message.text.split(maxsplit=2)
+    if len(parts) < 2:
+        names = ", ".join(sorted(AVAILABLE_AGENTS))
+        await update.message.reply_text(f"Usage: /agent <name> <prompt>\nAvailable: {names}")
+        return
+
+    agent_name = parts[1].lower()
+    if agent_name not in AVAILABLE_AGENTS:
+        names = ", ".join(sorted(AVAILABLE_AGENTS))
+        await update.message.reply_text(f"Unknown agent: {agent_name}\nAvailable: {names}")
+        return
+
+    prompt = parts[2] if len(parts) > 2 else "Hello"
+
+    stop = asyncio.Event()
+    typing = asyncio.create_task(_typing_loop(update.effective_chat.id, update.get_bot(), stop))
+    try:
+        result = await run_claude(prompt, agent=agent_name)
+    finally:
+        stop.set()
+        await typing
+    await send_response(update.message, result)
+
+
 async def handle_jobs(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """List all scheduled jobs and their next run times."""
     jobs = context.job_queue.jobs()
@@ -132,6 +167,7 @@ def main() -> None:
     # Slash commands
     for cmd in COMMAND_MAP:
         app.add_handler(CommandHandler(cmd, handle_command, filters=owner_filter))
+    app.add_handler(CommandHandler("agent", handle_agent, filters=owner_filter))
     app.add_handler(CommandHandler("jobs", handle_jobs, filters=owner_filter))
 
     # Free-text messages
